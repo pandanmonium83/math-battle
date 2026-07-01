@@ -15,7 +15,7 @@ const defaultSettings = {
   digits: 1,
   questions: 10,
   seconds: 12,
-  nearTolerancePercent: 10,
+  nearTolerancePercent: 25,
 };
 
 function makeRoom(code) {
@@ -61,7 +61,6 @@ function sanitizeSettings(raw = {}) {
     "multiplication",
     "division",
     "percents",
-    "powers",
     "mixed",
   ]);
 
@@ -95,7 +94,7 @@ function formatNumber(value) {
 
 function chooseMode(mode) {
   if (mode !== "mixed") return mode;
-  const modes = ["addition", "subtraction", "multiplication", "division", "percents", "powers"];
+  const modes = ["addition", "subtraction", "multiplication", "division", "percents"];
   return modes[randomInt(0, modes.length - 1)];
 }
 
@@ -134,10 +133,7 @@ function generateQuestion(settings) {
     return { mode, prompt: `${percent}% of ${base}`, answer, answerLabel: formatNumber(answer) };
   }
 
-  const base = numberWithDigits(Math.min(digits, 2));
-  const exponent = randomInt(2, Math.min(5, digits + 2));
-  const answer = base ** exponent;
-  return { mode: "powers", prompt: `${base}^${exponent}`, answer, answerLabel: String(answer) };
+  return { mode: "addition", prompt: `${a} + ${b}`, answer: a + b, answerLabel: String(a + b) };
 }
 
 function scoreAnswer({ guess, answer, startedAt, seconds, tolerancePercent, streak }) {

@@ -6,7 +6,7 @@ Math Duel is a basic two-player browser game for testing mental math speed and a
 
 | Phase | Goal | Features | Definition of Done |
 | --- | --- | --- | --- |
-| 1. Prototype | Prove the game loop | Two-player rooms, addition/subtraction/multiplication/division/percents/powers, digit difficulty, timed rounds, scoring | Two players can join the same room and finish a match |
+| 1. Prototype | Prove the game loop | Two-player rooms, addition/subtraction/multiplication/division/percents, digit difficulty, timed rounds, scoring | Two players can join the same room and finish a match |
 | 2. Classroom Ready | Make it useful with students | Better room names, teacher host controls, copyable invite links, rematch button, clearer round review | A teacher can run quick matches without explaining the app |
 | 3. Skill Growth | Make practice adaptive | Difficulty ladder, mixed mode rules, weak-skill tracking, per-topic score breakdown | The game can recommend the next mode/difficulty |
 | 4. Accounts | Keep long-term progress | Student logins, saved scores, win/loss history, leaderboards, class groups | Players can return later and see progress |
@@ -32,7 +32,7 @@ If answer is perfect:
   correctness = 100
   perfect bonus = 25
 If answer is close:
-  correctness = 45 to 80, based on how close it is
+  correctness = 45 to 80, based on how close it is within 25% above or below
 If answer is outside range:
   correctness = 0
 
@@ -55,7 +55,6 @@ That means a player who answers instantly but is far from the correct answer ear
 | Multiplication | `7 x 8` | Number of digits controls factors |
 | Division | `72 / 8` | Server creates clean whole-number quotients |
 | Percents | `25% of 84` | Uses friendly percents |
-| Powers | `9^3` | Base and exponent scale gently |
 | Mixed | Any mode | Random mode each question |
 
 ## Run Locally
