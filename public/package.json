@@ -1,0 +1,13 @@
+{
+  "name": "math-duel",
+  "version": "1.0.0",
+  "description": "A basic two-player math duel game with live rooms and server-side scoring.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
