@@ -4,11 +4,15 @@ const path = require("path");
 const crypto = require("crypto");
 
 const PORT = process.env.PORT || 3000;
-const MAX_PLAYERS = 2;
+const MAX_PLAYERS = 8;
 const RESULT_PAUSE_MS = 2200;
+const BEST_GAME_LIMIT = 25;
 const PUBLIC_DIR = path.join(__dirname, "public");
+const DATA_DIR = path.join(__dirname, "data");
+const LEADERBOARD_FILE = path.join(DATA_DIR, "leaderboard.json");
 
 const rooms = new Map();
+let allTimeLeaderboard = loadLeaderboard();
 
 const defaultSettings = {
   mode: "addition",
@@ -32,12 +36,90 @@ function makeRoom(code) {
   };
 }
 
+function blankStats() {
+  return {
+    answers: 0,
+    perfect: 0,
+    close: 0,
+    missed: 0,
+    fastestMs: null,
+    totalCorrectMs: 0,
+  };
+}
+
+function loadLeaderboard() {
+  try {
+    const raw = fs.readFileSync(LEADERBOARD_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, BEST_GAME_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLeaderboard() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(allTimeLeaderboard, null, 2));
+  } catch (error) {
+    console.warn(`Could not save leaderboard: ${error.message}`);
+  }
+}
+
+function leaderboardEntryFor(player, room, rank) {
+  const stats = player.stats || blankStats();
+  const correct = stats.perfect + stats.close;
+  const accuracy = room.settings.questions ? Math.round((correct / room.settings.questions) * 100) : 0;
+
+  return {
+    id: crypto.randomUUID(),
+    name: player.name,
+    score: player.score,
+    rank,
+    accuracy,
+    perfect: stats.perfect,
+    close: stats.close,
+    missed: stats.missed,
+    fastestMs: stats.fastestMs,
+    mode: room.settings.mode,
+    digits: room.settings.digits,
+    questions: room.settings.questions,
+    seconds: room.settings.seconds,
+    nearTolerancePercent: room.settings.nearTolerancePercent,
+    playedAt: new Date().toISOString(),
+  };
+}
+
+function addLeaderboardEntries(entries) {
+  allTimeLeaderboard = [...allTimeLeaderboard, ...entries]
+    .filter((entry) => Number.isFinite(entry.score))
+    .sort((a, b) => b.score - a.score || new Date(a.playedAt) - new Date(b.playedAt))
+    .slice(0, BEST_GAME_LIMIT);
+  saveLeaderboard();
+}
+
+function standingsFor(room) {
+  return [...room.players]
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .map((player, index) => ({
+      rank: index + 1,
+      id: player.id,
+      name: player.name,
+      score: player.score,
+      perfectStreak: player.perfectStreak,
+      isHost: player.isHost,
+    }));
+}
+
 function publicRoom(room) {
   return {
     code: room.code,
     status: room.status,
     settings: room.settings,
     questionIndex: room.questionIndex,
+    maxPlayers: MAX_PLAYERS,
+    standings: standingsFor(room),
+    allTimeLeaderboard,
     players: room.players.map((player) => ({
       id: player.id,
       name: player.name,
@@ -136,15 +218,43 @@ function generateQuestion(settings) {
   return { mode: "addition", prompt: `${a} + ${b}`, answer: a + b, answerLabel: String(a + b) };
 }
 
-function scoreAnswer({ guess, answer, startedAt, seconds, tolerancePercent, streak }) {
+function difficultyMultiplier({ mode, digits, seconds, tolerancePercent }) {
+  const modeMultipliers = {
+    addition: 1,
+    subtraction: 1.1,
+    multiplication: 1.35,
+    division: 1.45,
+    percents: 1.55,
+    mixed: 1.25,
+  };
+  const digitMultipliers = {
+    1: 1,
+    2: 1.35,
+    3: 1.8,
+    4: 2.35,
+  };
+
+  const modeMultiplier = modeMultipliers[mode] || 1;
+  const digitMultiplier = digitMultipliers[digits] || 1;
+  const timeMultiplier = Math.min(1.6, Math.max(0.85, 12 / seconds));
+  const toleranceMultiplier = Math.min(1.3, Math.max(1, 1 + (25 - tolerancePercent) / 80));
+
+  return Number((modeMultiplier * digitMultiplier * timeMultiplier * toleranceMultiplier).toFixed(2));
+}
+
+function scoreAnswer({ guess, answer, startedAt, seconds, tolerancePercent, streak, mode, digits }) {
   const numericGuess = Number(guess);
+  const multiplier = difficultyMultiplier({ mode, digits, seconds, tolerancePercent });
+
   if (!Number.isFinite(numericGuess)) {
     return {
       points: 0,
+      basePoints: 0,
       correctnessPoints: 0,
       speedBonus: 0,
       perfectBonus: 0,
       streakBonus: 0,
+      difficultyMultiplier: multiplier,
       isPerfect: false,
       isNear: false,
       elapsedMs: Date.now() - startedAt,
@@ -184,12 +294,16 @@ function scoreAnswer({ guess, answer, startedAt, seconds, tolerancePercent, stre
     streakBonus = isPerfect ? Math.min(30, streak * 5) : 0;
   }
 
+  const basePoints = correctnessPoints + speedBonus + perfectBonus + streakBonus;
+
   return {
-    points: correctnessPoints + speedBonus + perfectBonus + streakBonus,
+    points: Math.round(basePoints * multiplier),
+    basePoints,
     correctnessPoints,
     speedBonus,
     perfectBonus,
     streakBonus,
+    difficultyMultiplier: multiplier,
     isPerfect,
     isNear,
     elapsedMs,
@@ -221,6 +335,38 @@ function currentQuestionForClient(room) {
   };
 }
 
+function matchRecapFor(room, standings) {
+  const winner = standings[0] || null;
+  const playerRecaps = standings.map((standing) => {
+    const player = findPlayer(room, standing.id);
+    const stats = player?.stats || blankStats();
+    const correct = stats.perfect + stats.close;
+    const accuracy = room.settings.questions ? Math.round((correct / room.settings.questions) * 100) : 0;
+    const averageCorrectMs = correct ? Math.round(stats.totalCorrectMs / correct) : null;
+
+    return {
+      rank: standing.rank,
+      id: standing.id,
+      name: standing.name,
+      score: standing.score,
+      accuracy,
+      perfect: stats.perfect,
+      close: stats.close,
+      missed: stats.missed,
+      fastestMs: stats.fastestMs,
+      averageCorrectMs,
+    };
+  });
+
+  return {
+    roomCode: room.code,
+    winner,
+    settings: room.settings,
+    completedAt: new Date().toISOString(),
+    players: playerRecaps,
+  };
+}
+
 function beginQuestion(room) {
   room.answers.clear();
   room.questionIndex += 1;
@@ -249,10 +395,17 @@ function settleQuestion(room) {
       ? submitted.result
       : {
           points: 0,
+          basePoints: 0,
           correctnessPoints: 0,
           speedBonus: 0,
           perfectBonus: 0,
           streakBonus: 0,
+          difficultyMultiplier: difficultyMultiplier({
+            mode: room.currentQuestion.mode,
+            digits: room.settings.digits,
+            seconds: room.settings.seconds,
+            tolerancePercent: room.settings.nearTolerancePercent,
+          }),
           isPerfect: false,
           isNear: false,
           elapsedMs: room.settings.seconds * 1000,
@@ -261,6 +414,25 @@ function settleQuestion(room) {
 
     if (!submitted || !result.isPerfect) {
       player.perfectStreak = 0;
+    }
+
+    if (!player.stats) player.stats = blankStats();
+    if (submitted) {
+      player.stats.answers += 1;
+    }
+
+    if (result.isPerfect) {
+      player.stats.perfect += 1;
+      player.stats.totalCorrectMs += result.elapsedMs;
+      player.stats.fastestMs =
+        player.stats.fastestMs === null ? result.elapsedMs : Math.min(player.stats.fastestMs, result.elapsedMs);
+    } else if (result.isNear) {
+      player.stats.close += 1;
+      player.stats.totalCorrectMs += result.elapsedMs;
+      player.stats.fastestMs =
+        player.stats.fastestMs === null ? result.elapsedMs : Math.min(player.stats.fastestMs, result.elapsedMs);
+    } else {
+      player.stats.missed += 1;
     }
 
     player.score += result.points;
@@ -284,12 +456,18 @@ function settleQuestion(room) {
 
   if (room.questionIndex >= room.settings.questions) {
     room.status = "finished";
-    const standings = [...room.players]
-      .sort((a, b) => b.score - a.score)
-      .map((player, index) => ({ rank: index + 1, id: player.id, name: player.name, score: player.score }));
+    const standings = standingsFor(room);
+    const recap = matchRecapFor(room, standings);
+    const entries = standings
+      .map((standing) => {
+        const player = findPlayer(room, standing.id);
+        return player ? leaderboardEntryFor(player, room, standing.rank) : null;
+      })
+      .filter(Boolean);
+    addLeaderboardEntries(entries);
 
     setTimeout(() => {
-      broadcast(room, "game:over", { standings });
+      broadcast(room, "game:over", { standings, recap, allTimeLeaderboard });
       emitRoom(room);
     }, RESULT_PAUSE_MS);
     return;
@@ -302,6 +480,7 @@ function resetScores(room) {
   room.players.forEach((player) => {
     player.score = 0;
     player.perfectStreak = 0;
+    player.stats = blankStats();
   });
   room.questionIndex = 0;
   room.currentQuestion = null;
@@ -336,7 +515,7 @@ function handleJoin(body) {
   let player = requestedId ? findPlayer(room, requestedId) : null;
 
   if (!player && room.players.length >= MAX_PLAYERS) {
-    return { status: 409, payload: { error: "This room already has two players." } };
+    return { status: 409, payload: { error: `This room already has ${MAX_PLAYERS} players.` } };
   }
 
   if (!player) {
@@ -345,6 +524,7 @@ function handleJoin(body) {
       name: displayName,
       score: 0,
       perfectStreak: 0,
+      stats: blankStats(),
       isHost: room.players.length === 0,
       lastSeen: Date.now(),
     };
@@ -406,6 +586,8 @@ function handleAnswer(body) {
     seconds: room.settings.seconds,
     tolerancePercent: room.settings.nearTolerancePercent,
     streak: player.perfectStreak,
+    mode: room.currentQuestion.mode,
+    digits: room.settings.digits,
   });
 
   if (result.isPerfect) {
