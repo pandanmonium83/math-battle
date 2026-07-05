@@ -80,6 +80,21 @@
         margin-bottom: 18px;
       }
 
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand-logo {
+        width: 72px;
+        height: 72px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        object-fit: contain;
+        background: #fff;
+      }
+
       .brand h1 {
         margin: 0;
         font-size: clamp(1.8rem, 4vw, 3.2rem);
@@ -89,6 +104,19 @@
       .brand p {
         margin: 0.45rem 0 0;
         color: var(--muted);
+      }
+
+      .brand-link {
+        display: inline-flex;
+        margin-top: 0.45rem;
+        color: var(--brand);
+        font-weight: 900;
+        text-decoration: none;
+      }
+
+      .brand-link:hover {
+        color: var(--brand-strong);
+        text-decoration: underline;
       }
 
       .status-pill {
@@ -371,6 +399,15 @@
           flex-direction: column;
         }
 
+        .brand {
+          align-items: flex-start;
+        }
+
+        .brand-logo {
+          width: 56px;
+          height: 56px;
+        }
+
         .settings-grid,
         .result-grid,
         .recap-grid {
@@ -387,8 +424,12 @@
     <main class="shell">
       <header class="topbar">
         <div class="brand">
-          <h1>Math Duel</h1>
-          <p>Up to eight players. Same room. Fast, accurate mental math wins.</p>
+          <img class="brand-logo" src="/assets/math-with-dan-logo.png" alt="Math With Dan logo" />
+          <div>
+            <h1>Math Duel</h1>
+            <p>Up to eight players. Same room. Fast, accurate mental math wins.</p>
+            <a class="brand-link" href="https://mathwithdan.com" target="_blank" rel="noopener">mathwithdan.com</a>
+          </div>
         </div>
         <div class="status-pill" id="connectionStatus">Connecting...</div>
       </header>

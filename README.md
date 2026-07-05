@@ -1,6 +1,6 @@
 # Math Duel
 
-Math Duel is a browser game for testing mental math speed and accuracy. One player creates a room, shares the room link, and up to eight players answer the same server-generated questions. A single player can also start a room alone for solo practice.
+Math Duel is a Math With Dan browser game for testing mental math speed and accuracy. One player creates a room, shares the room link, and up to eight players answer the same server-generated questions. A single player can also start a room alone for solo practice.
 
 ## Phase Plan
 
@@ -126,5 +126,6 @@ Simple deployment path:
 | --- | --- |
 | `server.js` | Hosts the game, manages rooms, generates questions, scores answers |
 | `public/index.html` | Complete browser interface |
+| `public/assets/math-with-dan-logo.png` | Math With Dan logo shown in the header |
 | `package.json` | Node dependencies and start scripts |
 | `data/leaderboard.json` | Created automatically after completed games |
