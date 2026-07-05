@@ -67,7 +67,7 @@
       }
 
       .shell {
-        width: min(1120px, calc(100vw - 28px));
+        width: min(1180px, calc(100vw - 28px));
         margin: 0 auto;
         padding: 24px 0 40px;
       }
@@ -180,6 +180,73 @@
       .score {
         font-size: 1.35rem;
         font-weight: 900;
+      }
+
+      .leaderboard {
+        display: grid;
+        gap: 8px;
+      }
+
+      .leader-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #fbfcff;
+      }
+
+      .leader-row.me {
+        border-color: rgba(36, 107, 254, 0.42);
+        background: #f1f5ff;
+      }
+
+      .rank {
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        color: #fff;
+        background: var(--ink);
+        font-weight: 900;
+      }
+
+      .leader-meta {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .recap-head {
+        display: grid;
+        gap: 4px;
+        margin-bottom: 12px;
+      }
+
+      .recap-title {
+        font-size: 1.1rem;
+        font-weight: 950;
+      }
+
+      .recap-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .stat-box {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #fbfcff;
+      }
+
+      .stat-box strong {
+        display: block;
+        font-size: 1.2rem;
       }
 
       .arena {
@@ -305,7 +372,8 @@
         }
 
         .settings-grid,
-        .result-grid {
+        .result-grid,
+        .recap-grid {
           grid-template-columns: 1fr;
         }
 
@@ -320,7 +388,7 @@
       <header class="topbar">
         <div class="brand">
           <h1>Math Duel</h1>
-          <p>Two players. Same room. Fast, accurate mental math wins.</p>
+          <p>Up to eight players. Same room. Fast, accurate mental math wins.</p>
         </div>
         <div class="status-pill" id="connectionStatus">Connecting...</div>
       </header>
@@ -382,8 +450,23 @@
             <hr style="width: 100%; border: 0; border-top: 1px solid var(--line)" />
 
             <div>
-              <h2 style="margin: 0 0 10px; font-size: 1.1rem">Players</h2>
+              <h2 style="margin: 0 0 10px; font-size: 1.1rem" id="playersTitle">Players</h2>
               <div class="players" id="players"></div>
+            </div>
+
+            <div>
+              <h2 style="margin: 0 0 10px; font-size: 1.1rem">Current Match</h2>
+              <div class="leaderboard" id="leaderboard"></div>
+            </div>
+
+            <div>
+              <h2 style="margin: 0 0 10px; font-size: 1.1rem">Best 25 Games</h2>
+              <div class="leaderboard" id="allTimeLeaderboard"></div>
+            </div>
+
+            <div>
+              <h2 style="margin: 0 0 10px; font-size: 1.1rem">Your Bests</h2>
+              <div class="leaderboard" id="personalBests"></div>
             </div>
           </div>
         </aside>
@@ -410,7 +493,7 @@
           </div>
 
           <div class="feedback" id="feedback">
-            <div class="empty">Create a room, share the link, and start when both players are in.</div>
+            <div class="empty">Create a room, share the link, and start when players are in.</div>
           </div>
         </section>
       </section>
@@ -426,6 +509,7 @@
         answered: false,
         timerHandle: null,
         eventSource: null,
+        allTimeLeaderboard: [],
       };
 
       const params = new URLSearchParams(window.location.search);
@@ -450,6 +534,10 @@
 
       function playerStorageKey(roomCode) {
         return `mathDuelPlayer:${roomCode}`;
+      }
+
+      function personalBestsKey() {
+        return "mathDuelPersonalBests";
       }
 
       function connectEvents() {
@@ -528,6 +616,8 @@
 
       function renderPlayers() {
         const players = state.room?.players || [];
+        const maxPlayers = state.room?.maxPlayers || 8;
+        $("playersTitle").textContent = `Players (${players.length}/${maxPlayers})`;
         $("players").innerHTML = players.length
           ? players
               .map(
@@ -535,7 +625,7 @@
                   <div class="player-card">
                     <div>
                       <strong>${escapeHtml(player.name)}${player.id === state.me?.id ? " (you)" : ""}</strong>
-                      <span>${player.isHost ? "Host" : "Challenger"} · Streak ${player.perfectStreak}</span>
+                      <span>${player.isHost ? "Host" : "Player"} · Streak ${player.perfectStreak}</span>
                     </div>
                     <div class="score">${player.score}</div>
                   </div>
@@ -543,6 +633,104 @@
               )
               .join("")
           : `<div class="empty">No players yet.</div>`;
+      }
+
+      function renderLeaderboard() {
+        const standings = state.room?.standings || [];
+        $("leaderboard").innerHTML = standings.length
+          ? standings
+              .map(
+                (player) => `
+                  <div class="leader-row ${player.id === state.me?.id ? "me" : ""}">
+                    <div class="rank">${player.rank}</div>
+                    <div>
+                      <strong>${escapeHtml(player.name)}${player.id === state.me?.id ? " (you)" : ""}</strong>
+                      <div class="leader-meta">${player.isHost ? "Host" : "Player"} · Streak ${player.perfectStreak}</div>
+                    </div>
+                    <div class="score">${player.score}</div>
+                  </div>
+                `
+              )
+              .join("")
+          : `<div class="empty">Join a room to see standings.</div>`;
+      }
+
+      function renderAllTimeLeaderboard() {
+        const entries = state.room?.allTimeLeaderboard || state.allTimeLeaderboard || [];
+        $("allTimeLeaderboard").innerHTML = entries.length
+          ? entries
+              .slice(0, 25)
+              .map(
+                (entry, index) => `
+                  <div class="leader-row">
+                    <div class="rank">${index + 1}</div>
+                    <div>
+                      <strong>${escapeHtml(entry.name)}</strong>
+                      <div class="leader-meta">${entry.mode}, ${entry.digits} digit · ${entry.accuracy}% accuracy</div>
+                    </div>
+                    <div class="score">${entry.score}</div>
+                  </div>
+                `
+              )
+              .join("")
+          : `<div class="empty">Top games will appear after completed matches.</div>`;
+      }
+
+      function getPersonalBests() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(personalBestsKey()) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function renderPersonalBests() {
+        const entries = getPersonalBests();
+        $("personalBests").innerHTML = entries.length
+          ? entries
+              .slice(0, 25)
+              .map(
+                (entry, index) => `
+                  <div class="leader-row">
+                    <div class="rank">${index + 1}</div>
+                    <div>
+                      <strong>${escapeHtml(entry.name)}</strong>
+                      <div class="leader-meta">${entry.mode}, ${entry.digits} digit · ${entry.accuracy}% accuracy</div>
+                    </div>
+                    <div class="score">${entry.score}</div>
+                  </div>
+                `
+              )
+              .join("")
+          : `<div class="empty">Your solo and match scores will save on this browser.</div>`;
+      }
+
+      function savePersonalBest(recap) {
+        if (!recap || !state.me) return;
+        const me = recap.players.find((player) => player.id === state.me.id);
+        if (!me) return;
+
+        const entry = {
+          name: me.name,
+          score: me.score,
+          accuracy: me.accuracy,
+          perfect: me.perfect,
+          close: me.close,
+          missed: me.missed,
+          fastestMs: me.fastestMs,
+          mode: recap.settings.mode,
+          digits: recap.settings.digits,
+          questions: recap.settings.questions,
+          seconds: recap.settings.seconds,
+          nearTolerancePercent: recap.settings.nearTolerancePercent,
+          playedAt: recap.completedAt,
+        };
+
+        const updated = [...getPersonalBests(), entry]
+          .sort((a, b) => b.score - a.score || new Date(a.playedAt) - new Date(b.playedAt))
+          .slice(0, 25);
+        localStorage.setItem(personalBestsKey(), JSON.stringify(updated));
       }
 
       function renderRoom() {
@@ -567,8 +755,12 @@
         });
 
         if (joined) setSettings(room.settings);
+        state.allTimeLeaderboard = room?.allTimeLeaderboard || state.allTimeLeaderboard;
         updateShareLine();
         renderPlayers();
+        renderLeaderboard();
+        renderAllTimeLeaderboard();
+        renderPersonalBests();
       }
 
       function startTimer(question) {
@@ -597,6 +789,11 @@
         });
       }
 
+      function formatTime(ms) {
+        if (!Number.isFinite(ms)) return "--";
+        return `${(ms / 1000).toFixed(1)}s`;
+      }
+
       function renderResults(payload) {
         $("feedback").innerHTML = `
           <div class="small" style="margin-bottom: 8px">Correct answer: <strong>${escapeHtml(payload.correctAnswer)}</strong></div>
@@ -610,6 +807,9 @@
                     <div>${escapeHtml(result.feedback)} · +${result.points} pts</div>
                     <div class="small">
                       Guess: ${escapeHtml(result.guess || "none")} · Time: ${(result.elapsedMs / 1000).toFixed(1)}s
+                    </div>
+                    <div class="small">
+                      Base ${result.basePoints || 0} x difficulty ${(result.difficultyMultiplier || 1).toFixed(2)} = +${result.points}
                     </div>
                     <div class="small">
                       Correct ${result.correctnessPoints}, speed ${result.speedBonus}, perfect ${result.perfectBonus}, streak ${result.streakBonus}
@@ -631,24 +831,54 @@
         $("answerInput").disabled = false;
         $("answerBtn").disabled = false;
         $("answerStatus").textContent = "";
-        $("feedback").innerHTML = `<div class="empty">Solve it fast, but accuracy unlocks the speed bonus.</div>`;
+        $("feedback").innerHTML = `<div class="empty">Solve it fast, but accuracy unlocks the speed bonus. Harder settings multiply the points.</div>`;
         $("answerInput").focus();
         startTimer(question);
       }
 
-      function showGameOver({ standings }) {
+      function showGameOver({ standings, recap, allTimeLeaderboard }) {
+        if (allTimeLeaderboard) {
+          state.allTimeLeaderboard = allTimeLeaderboard;
+        }
+        savePersonalBest(recap);
+        renderAllTimeLeaderboard();
+        renderPersonalBests();
+
         clearInterval(state.timerHandle);
         $("timerText").textContent = "--";
         $("promptLabel").textContent = "Final";
         $("questionText").textContent = standings[0] ? `${standings[0].name} wins` : "Game over";
+        const winner = recap?.winner || standings[0];
+        const me = recap?.players?.find((player) => player.id === state.me?.id);
         $("feedback").innerHTML = `
+          <div class="recap-head">
+            <div class="recap-title">Match Recap</div>
+            <div class="small">
+              Winner: <strong>${escapeHtml(winner?.name || "None")}</strong>
+              ${me ? ` · Your score: <strong>${me.score}</strong> · Accuracy: <strong>${me.accuracy}%</strong>` : ""}
+            </div>
+          </div>
+          ${
+            me
+              ? `<div class="recap-grid">
+                  <div class="stat-box"><strong>${me.perfect}</strong><span class="small">Perfect</span></div>
+                  <div class="stat-box"><strong>${me.close}</strong><span class="small">Close</span></div>
+                  <div class="stat-box"><strong>${formatTime(me.fastestMs)}</strong><span class="small">Fastest correct</span></div>
+                </div>`
+              : ""
+          }
           <div class="result-grid">
-            ${standings
+            ${(recap?.players || standings)
               .map(
                 (player) => `
                   <div class="result-card ${player.rank === 1 ? "good" : ""}">
                     <strong class="${player.rank === 1 ? "winner" : ""}">#${player.rank} ${escapeHtml(player.name)}</strong>
                     <div>${player.score} points</div>
+                    ${
+                      player.accuracy !== undefined
+                        ? `<div class="small">${player.accuracy}% accuracy · ${player.perfect} perfect · ${player.close} close · ${player.missed} missed</div>`
+                        : ""
+                    }
                   </div>
                 `
               )
@@ -734,6 +964,9 @@
           $("answerStatus").textContent = error.message;
         }
       });
+
+      renderAllTimeLeaderboard();
+      renderPersonalBests();
     </script>
   </body>
 </html>
